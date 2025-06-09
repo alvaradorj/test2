@@ -22,9 +22,12 @@ if uploaded_file:
         first_page = pdf.pages[0]
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
-        # Aseguramos tipo PIL.Image
-        if not isinstance(page_image, Image.Image):
-            page_image = Image.fromarray(page_image)
+
+        # --- Conversión para compatibilidad 100% ---
+        buffer_img = io.BytesIO()
+        page_image.save(buffer_img, format="PNG")
+        buffer_img.seek(0)
+        page_image = Image.open(buffer_img).convert("RGBA")
         page_width, page_height = page_image.size
 
     # Canvas visual para dibujar zonas
