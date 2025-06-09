@@ -24,19 +24,17 @@ if uploaded_file:
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # --- Conversión para compatibilidad con st_canvas ---
+        # Asegura que sea RGB antes de convertir a numpy
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
-        page_image = Image.open(buffer_img).convert("RGB")  # ¡SOLO RGB!
+        page_image = Image.open(buffer_img).convert("RGB")
         page_width, page_height = page_image.size
+        page_image_np = np.array(page_image)
 
-        page_image_np = np.array(page_image)  # <-- Numpy array RGB (H, W, 3)
-
-    # Canvas visual para dibujar zonas
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.2)",
+        fill_color="rgba(255, 165, 0, 0.2)",  # Naranja translúcido
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
@@ -57,7 +55,7 @@ if uploaded_file:
                 top = obj["top"]
                 width = obj["width"]
                 height = obj["height"]
-                # Ajuste para pdfplumber: (x0, y0, x1, y1)
+                # pdfplumber espera (x0, y0, x1, y1)
                 zonas.append((left, top, left + width, top + height))
 
         if zonas:
