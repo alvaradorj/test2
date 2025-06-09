@@ -6,8 +6,9 @@ import io
 from PIL import Image
 import re
 
-st.set_page_config(page_title="PDF Table Extractor", layout="wide")
+st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
 st.title("PDF a Excel: Selecciona zonas de datos manualmente")
+
 st.markdown("""
 1. **Sube tu PDF**
 2. **Selecciona visualmente** las zonas que contienen datos (dibuja uno o más rectángulos)
@@ -16,13 +17,17 @@ st.markdown("""
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
 if uploaded_file:
-    # Extrae la primera página como imagen
-    with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
+    pdf_bytes = uploaded_file.read()
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         first_page = pdf.pages[0]
-        page_image = first_page.to_image(resolution=150).original
+        img_wrapper = first_page.to_image(resolution=150)
+        page_image = img_wrapper.original
+        # Aseguramos tipo PIL.Image
+        if not isinstance(page_image, Image.Image):
+            page_image = Image.fromarray(page_image)
         page_width, page_height = page_image.size
 
-    # Dibuja sobre la imagen
+    # Canvas visual para dibujar zonas
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.2)",
@@ -37,25 +42,25 @@ if uploaded_file:
         key="canvas"
     )
 
+    # Procesado de zonas seleccionadas
     if canvas_result.json_data:
         zonas = []
         for obj in canvas_result.json_data["objects"]:
             if obj["type"] == "rect":
-                # Coordenadas en pixeles
                 left = obj["left"]
                 top = obj["top"]
                 width = obj["width"]
                 height = obj["height"]
+                # Ajuste para pdfplumber: (x0, y0, x1, y1)
                 zonas.append((left, top, left + width, top + height))
 
         if zonas:
             st.success(f"{len(zonas)} zona(s) seleccionada(s). Puedes continuar.")
             if st.button("Extraer datos y generar Excel"):
-                with pdfplumber.open(io.BytesIO(uploaded_file.getvalue())) as pdf:
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
                     datos = []
                     regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
                     for zona in zonas:
-                        # Recortar la zona en la primera página
                         crop = pdf.pages[0].crop(zona)
                         texto = crop.extract_text() or ""
                         segmento = ""
@@ -80,7 +85,6 @@ if uploaded_file:
 
                 if datos:
                     df = pd.DataFrame(datos, columns=["Segmento", "Desde (km)", "Hasta (km)", "Velocidad Media (km/h)"])
-                    # Formateo a 2 decimales
                     df["Desde (km)"] = df["Desde (km)"].map(lambda x: f"{x:.2f}")
                     df["Hasta (km)"] = df["Hasta (km)"].map(lambda x: f"{x:.2f}")
                     st.dataframe(df)
