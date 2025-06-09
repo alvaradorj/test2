@@ -17,14 +17,17 @@ st.markdown("""
 """)
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
-if uploaded_file:
+
+if not uploaded_file:
+    st.info("Sube un PDF para empezar.")
+else:
     pdf_bytes = uploaded_file.read()
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         first_page = pdf.pages[0]
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # Asegura que sea RGB antes de convertir a numpy
+        # Asegura que la imagen es RGB antes de pasar a numpy
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
@@ -55,7 +58,6 @@ if uploaded_file:
                 top = obj["top"]
                 width = obj["width"]
                 height = obj["height"]
-                # pdfplumber espera (x0, y0, x1, y1)
                 zonas.append((left, top, left + width, top + height))
 
         if zonas:
@@ -105,9 +107,5 @@ if uploaded_file:
                     st.error("No se extrajo ningún dato. Ajusta las zonas o revisa el formato del PDF.")
         else:
             st.warning("Dibuja al menos una zona antes de continuar.")
-
     else:
         st.info("Dibuja con el ratón las zonas de datos sobre la imagen del PDF.")
-
-else:
-    st.info("Sube un PDF para empezar.")
