@@ -37,6 +37,16 @@ if uploaded_file:
     x1 = st.number_input("x1 (derecha)", min_value=0, max_value=width, value=width, key="x1")
     y1 = st.number_input("y1 (abajo)", min_value=0, max_value=height, value=height, key="y1")
 
+    # --- Previsualización de recorte antes de añadir ---
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        page = pdf.pages[page_number-1]
+        crop = page.crop((x0, y0, x1, y1))
+        crop_img = crop.to_image(resolution=150).original.convert("RGB")
+        st.image(crop_img, caption="Previsualización del recorte", use_container_width=True)
+
+        texto_crop = crop.extract_text() or ""
+        st.text_area("Texto extraído en la zona seleccionada:", texto_crop, height=120)
+
     if st.button("Añadir zona"):
         nueva_zona = {
             "pagina": page_number-1,
