@@ -19,14 +19,13 @@ if uploaded_file:
         page_number = st.number_input("Selecciona la página (empezando en 1)", min_value=1, max_value=num_pages, value=1)
         page = pdf.pages[page_number-1]
         img = page.to_image(resolution=150).original.convert("RGB")
-        st.image(img, caption=f"Página {page_number}", use_column_width=True)
+        st.image(img, caption=f"Página {page_number}", use_container_width=True)
         width, height = img.size
         st.write(f"Tamaño de la página: {width}px x {height}px")
 
     # Zona para gestionar grupos/zonas
     st.subheader("Define las zonas y los grupos")
 
-    # Zona temporal
     if "zonas" not in st.session_state:
         st.session_state["zonas"] = []
 
@@ -69,12 +68,10 @@ if uploaded_file:
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             for grupo in st.session_state["zonas"]:
                 texto_acumulado = ""
-                # Unimos el texto de todas las zonas de este grupo
                 for zona in grupo:
                     page = pdf.pages[zona["pagina"]]
                     crop = page.crop(zona["coords"])
                     texto_acumulado += (crop.extract_text() or "") + "\n"
-                # Procesamos el texto del grupo
                 datos = []
                 regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
                 segmento = ""
