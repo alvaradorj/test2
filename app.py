@@ -4,8 +4,14 @@ import pdfplumber
 import pandas as pd
 import io
 from PIL import Image
-import numpy as np
 import re
+import base64
+
+def pil_to_base64(img):
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    base64_img = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{base64_img}"
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
 st.title("PDF a Excel: Selecciona zonas de datos manualmente")
@@ -27,13 +33,15 @@ else:
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # Asegura que la imagen es RGB antes de pasar a numpy
+        # Siempre RGB para máxima compatibilidad
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
         page_image = Image.open(buffer_img).convert("RGB")
         page_width, page_height = page_image.size
-        page_image_np = np.array(page_image)
+
+        # Convertimos a base64 para fondo canvas
+        page_image_base64 = pil_to_base64(page_image)
 
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
@@ -41,7 +49,7 @@ else:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image_np,
+        background_image=page_image_base64,  # <-- Base64 string, nunca numpy
         update_streamlit=True,
         height=page_height,
         width=page_width,
