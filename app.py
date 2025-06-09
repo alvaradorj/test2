@@ -9,6 +9,14 @@ st.title("PDF a Excel: Extracción de zonas múltiples y consecutivas")
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
 
+def coords_img2pdf(x0, y0, x1, y1, img_width, img_height, pdf_width, pdf_height):
+    x0_pdf = x0 * pdf_width / img_width
+    x1_pdf = x1 * pdf_width / img_width
+    # Invertimos Y porque origen en imagen es arriba y en PDF es abajo
+    y0_pdf = pdf_height - (y0 * pdf_height / img_height)
+    y1_pdf = pdf_height - (y1 * pdf_height / img_height)
+    return (x0_pdf, min(y0_pdf, y1_pdf), x1_pdf, max(y0_pdf, y1_pdf))
+
 if uploaded_file:
     pdf_bytes = uploaded_file.read()
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
@@ -20,8 +28,10 @@ if uploaded_file:
         page = pdf.pages[page_number-1]
         img = page.to_image(resolution=150).original.convert("RGB")
         st.image(img, caption=f"Página {page_number}", use_container_width=True)
-        width, height = img.size
-        st.write(f"Tamaño de la página: {width}px x {height}px")
+        img_width, img_height = img.size
+        pdf_width, pdf_height = page.width, page.height
+        st.write(f"Tamaño de la imagen: {img_width}px x {img_height}px")
+        st.write(f"Tamaño del PDF: {pdf_width} x {pdf_height}")
 
     # Zona para gestionar grupos/zonas
     st.subheader("Define las zonas y los grupos")
@@ -29,22 +39,26 @@ if uploaded_file:
     if "zonas" not in st.session_state:
         st.session_state["zonas"] = []
 
-    # Añadir una nueva zona a un grupo existente o a uno nuevo
     grupo_opciones = ["Nuevo grupo"] + [f"Grupo {i+1}" for i in range(len(st.session_state["zonas"]))]
     grupo_seleccionado = st.selectbox("¿A qué grupo pertenece esta zona?", grupo_opciones)
-    x0 = st.number_input("x0 (izquierda)", min_value=0, max_value=width, value=0, key="x0")
-    y0 = st.number_input("y0 (arriba)", min_value=0, max_value=height, value=0, key="y0")
-    x1 = st.number_input("x1 (derecha)", min_value=0, max_value=width, value=width, key="x1")
-    y1 = st.number_input("y1 (abajo)", min_value=0, max_value=height, value=height, key="y1")
+    x0 = st.number_input("x0 (izquierda)", min_value=0, max_value=img_width, value=0, key="x0")
+    y0 = st.number_input("y0 (arriba)", min_value=0, max_value=img_height, value=0, key="y0")
+    x1 = st.number_input("x1 (derecha)", min_value=0, max_value=img_width, value=img_width, key="x1")
+    y1 = st.number_input("y1 (abajo)", min_value=0, max_value=img_height, value=img_height, key="y1")
 
-    # --- Previsualización de recorte antes de añadir ---
+    # Previsualización de recorte (en imagen)
+    crop_img = img.crop((x0, y0, x1, y1))
+    st.image(crop_img, caption="Previsualización del recorte", use_container_width=True)
+
+    # Previsualización del texto PDF (recorte real)
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         page = pdf.pages[page_number-1]
-        crop = page.crop((x0, y0, x1, y1))
-        crop_img = crop.to_image(resolution=150).original.convert("RGB")
-        st.image(crop_img, caption="Previsualización del recorte", use_container_width=True)
-
-        texto_crop = crop.extract_text() or ""
+        pdf_crop_coords = coords_img2pdf(x0, y0, x1, y1, img_width, img_height, pdf_width, pdf_height)
+        try:
+            crop = page.crop(pdf_crop_coords)
+            texto_crop = crop.extract_text() or ""
+        except Exception as e:
+            texto_crop = f"Error en las coordenadas seleccionadas: {e}"
         st.text_area("Texto extraído en la zona seleccionada:", texto_crop, height=120)
 
     if st.button("Añadir zona"):
@@ -67,7 +81,6 @@ if uploaded_file:
             for z in grupo:
                 st.markdown(f"- Página {z['pagina']+1} | x0={z['coords'][0]}, y0={z['coords'][1]}, x1={z['coords'][2]}, y1={z['coords'][3]}")
 
-        # Botón para limpiar zonas
         if st.button("Limpiar todas las zonas"):
             st.session_state["zonas"] = []
             st.experimental_rerun()
@@ -80,7 +93,8 @@ if uploaded_file:
                 texto_acumulado = ""
                 for zona in grupo:
                     page = pdf.pages[zona["pagina"]]
-                    crop = page.crop(zona["coords"])
+                    pdf_crop_coords = coords_img2pdf(*zona["coords"], img_width, img_height, page.width, page.height)
+                    crop = page.crop(pdf_crop_coords)
                     texto_acumulado += (crop.extract_text() or "") + "\n"
                 datos = []
                 regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
