@@ -1,117 +1,119 @@
 import streamlit as st
-from streamlit_drawable_canvas import st_canvas
 import pdfplumber
+from PIL import Image
 import pandas as pd
 import io
-from PIL import Image
-import numpy as np
 import re
 
-st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
-st.title("PDF a Excel: Selecciona zonas de datos manualmente")
-
-st.markdown("""
-1. **Sube tu PDF**
-2. **Selecciona visualmente** las zonas que contienen datos (dibuja uno o más rectángulos)
-3. **Extrae y descarga el Excel**
-""")
+st.title("PDF a Excel: Extracción de zonas múltiples y consecutivas")
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
 
-if not uploaded_file:
-    st.info("Sube un PDF para empezar.")
-else:
+if uploaded_file:
     pdf_bytes = uploaded_file.read()
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        first_page = pdf.pages[0]
-        img_wrapper = first_page.to_image(resolution=150)
-        page_image = img_wrapper.original
+        num_pages = len(pdf.pages)
+        st.info(f"El PDF tiene {num_pages} páginas.")
 
-        # GUARDA a buffer y reabre siempre como PIL.Image RGB
-        buffer_img = io.BytesIO()
-        page_image.save(buffer_img, format="PNG")
-        buffer_img.seek(0)
-        page_image = Image.open(buffer_img).convert("RGB")
+        # Selección de página
+        page_number = st.number_input("Selecciona la página (empezando en 1)", min_value=1, max_value=num_pages, value=1)
+        page = pdf.pages[page_number-1]
+        img = page.to_image(resolution=150).original.convert("RGB")
+        st.image(img, caption=f"Página {page_number}", use_column_width=True)
+        width, height = img.size
+        st.write(f"Tamaño de la página: {width}px x {height}px")
 
-        # Truco extra: re-convierte a PNG en otro buffer y reabre una vez más (¡soluciona bugs en Streamlit Cloud!)
-        buffer_img2 = io.BytesIO()
-        page_image.save(buffer_img2, format="PNG")
-        buffer_img2.seek(0)
-        page_image = Image.open(buffer_img2).convert("RGB")
+    # Zona para gestionar grupos/zonas
+    st.subheader("Define las zonas y los grupos")
 
-        page_width, page_height = page_image.size
+    # Zona temporal
+    if "zonas" not in st.session_state:
+        st.session_state["zonas"] = []
 
-    st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.2)",  # Naranja translúcido
-        stroke_width=2,
-        stroke_color="#ff8800",
-        background_color="#fff",
-        background_image=page_image,  # PIL.Image en RGB, reabierto 2 veces
-        update_streamlit=True,
-        height=page_height,
-        width=page_width,
-        drawing_mode="rect",
-        key="canvas"
-    )
+    # Añadir una nueva zona a un grupo existente o a uno nuevo
+    grupo_opciones = ["Nuevo grupo"] + [f"Grupo {i+1}" for i in range(len(st.session_state["zonas"]))]
+    grupo_seleccionado = st.selectbox("¿A qué grupo pertenece esta zona?", grupo_opciones)
+    x0 = st.number_input("x0 (izquierda)", min_value=0, max_value=width, value=0, key="x0")
+    y0 = st.number_input("y0 (arriba)", min_value=0, max_value=height, value=0, key="y0")
+    x1 = st.number_input("x1 (derecha)", min_value=0, max_value=width, value=width, key="x1")
+    y1 = st.number_input("y1 (abajo)", min_value=0, max_value=height, value=height, key="y1")
 
-    # El resto igual...
-    if canvas_result.json_data:
-        zonas = []
-        for obj in canvas_result.json_data["objects"]:
-            if obj["type"] == "rect":
-                left = obj["left"]
-                top = obj["top"]
-                width = obj["width"]
-                height = obj["height"]
-                zonas.append((left, top, left + width, top + height))
-
-        if zonas:
-            st.success(f"{len(zonas)} zona(s) seleccionada(s). Puedes continuar.")
-            if st.button("Extraer datos y generar Excel"):
-                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                    datos = []
-                    regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
-                    for zona in zonas:
-                        crop = pdf.pages[0].crop(zona)
-                        texto = crop.extract_text() or ""
-                        segmento = ""
-                        for linea in texto.split("\n"):
-                            may = linea.upper()
-                            for seg in {"PRÓLOGO", "SS1", "SS2", "REGULARIDAD", "EXCEPCIONALES"}:
-                                if seg in may:
-                                    segmento = seg
-                                    break
-                            match = regex_tramo.search(linea)
-                            if match and segmento:
-                                desde, hasta, media, _ = match.groups()
-                                label = segmento
-                                if segmento.upper() == "EXCEPCIONALES":
-                                    label = f"{segmento}-EX"
-                                datos.append({
-                                    "Segmento": label,
-                                    "Desde (km)": float(desde.replace(",", ".")),
-                                    "Hasta (km)": float(hasta.replace(",", ".")),
-                                    "Velocidad Media (km/h)": int(media)
-                                })
-
-                if datos:
-                    df = pd.DataFrame(datos, columns=["Segmento", "Desde (km)", "Hasta (km)", "Velocidad Media (km/h)"])
-                    df["Desde (km)"] = df["Desde (km)"].map(lambda x: f"{x:.2f}")
-                    df["Hasta (km)"] = df["Hasta (km)"].map(lambda x: f"{x:.2f}")
-                    st.dataframe(df)
-                    buffer = io.BytesIO()
-                    df.to_excel(buffer, index=False, engine="openpyxl")
-                    buffer.seek(0)
-                    st.download_button(
-                        label="⬇️ Descargar Excel",
-                        data=buffer,
-                        file_name="resultado.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                else:
-                    st.error("No se extrajo ningún dato. Ajusta las zonas o revisa el formato del PDF.")
+    if st.button("Añadir zona"):
+        nueva_zona = {
+            "pagina": page_number-1,
+            "coords": (x0, y0, x1, y1)
+        }
+        if grupo_seleccionado == "Nuevo grupo":
+            st.session_state["zonas"].append([nueva_zona])
         else:
-            st.warning("Dibuja al menos una zona antes de continuar.")
-    else:
-        st.info("Dibuja con el ratón las zonas de datos sobre la imagen del PDF.")
+            idx = int(grupo_seleccionado.split(" ")[1]) - 1
+            st.session_state["zonas"][idx].append(nueva_zona)
+        st.success(f"Zona añadida a {grupo_seleccionado}.")
+
+    # Mostrar las zonas agregadas
+    if st.session_state["zonas"]:
+        st.markdown("#### Zonas añadidas (por grupos):")
+        for i, grupo in enumerate(st.session_state["zonas"]):
+            st.markdown(f"**Grupo {i+1}:**")
+            for z in grupo:
+                st.markdown(f"- Página {z['pagina']+1} | x0={z['coords'][0]}, y0={z['coords'][1]}, x1={z['coords'][2]}, y1={z['coords'][3]}")
+
+        # Botón para limpiar zonas
+        if st.button("Limpiar todas las zonas"):
+            st.session_state["zonas"] = []
+            st.experimental_rerun()
+
+    # Procesar extracción de datos
+    if st.session_state["zonas"] and st.button("Extraer datos de todas las zonas y descargar Excel"):
+        datos_finales = []
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for grupo in st.session_state["zonas"]:
+                texto_acumulado = ""
+                # Unimos el texto de todas las zonas de este grupo
+                for zona in grupo:
+                    page = pdf.pages[zona["pagina"]]
+                    crop = page.crop(zona["coords"])
+                    texto_acumulado += (crop.extract_text() or "") + "\n"
+                # Procesamos el texto del grupo
+                datos = []
+                regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
+                segmento = ""
+                for linea in texto_acumulado.split("\n"):
+                    may = linea.upper()
+                    for seg in {"PRÓLOGO", "SS1", "SS2", "REGULARIDAD", "EXCEPCIONALES"}:
+                        if seg in may:
+                            segmento = seg
+                            break
+                    match = regex_tramo.search(linea)
+                    if match and segmento:
+                        desde, hasta, media, _ = match.groups()
+                        label = segmento
+                        if segmento.upper() == "EXCEPCIONALES":
+                            label = f"{segmento}-EX"
+                        datos.append({
+                            "Segmento": label,
+                            "Desde (km)": float(desde.replace(",", ".")),
+                            "Hasta (km)": float(hasta.replace(",", ".")),
+                            "Velocidad Media (km/h)": int(media)
+                        })
+                datos_finales.extend(datos)
+
+        if datos_finales:
+            df = pd.DataFrame(datos_finales, columns=["Segmento", "Desde (km)", "Hasta (km)", "Velocidad Media (km/h)"])
+            df["Desde (km)"] = df["Desde (km)"].map(lambda x: f"{x:.2f}")
+            df["Hasta (km)"] = df["Hasta (km)"].map(lambda x: f"{x:.2f}")
+            st.dataframe(df)
+            buffer = io.BytesIO()
+            df.to_excel(buffer, index=False, engine="openpyxl")
+            buffer.seek(0)
+            st.download_button(
+                label="⬇️ Descargar Excel",
+                data=buffer,
+                file_name="resultado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning("No se encontraron datos en las zonas/grupos seleccionados.")
+
+else:
+    st.info("Sube un PDF para empezar.")
