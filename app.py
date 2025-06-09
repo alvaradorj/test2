@@ -12,7 +12,6 @@ uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
 def coords_img2pdf(x0, y0, x1, y1, img_width, img_height, pdf_width, pdf_height):
     x0_pdf = x0 * pdf_width / img_width
     x1_pdf = x1 * pdf_width / img_width
-    # Invertimos Y porque origen en imagen es arriba y en PDF es abajo
     y0_pdf = pdf_height - (y0 * pdf_height / img_height)
     y1_pdf = pdf_height - (y1 * pdf_height / img_height)
     return (x0_pdf, min(y0_pdf, y1_pdf), x1_pdf, max(y0_pdf, y1_pdf))
@@ -23,7 +22,6 @@ if uploaded_file:
         num_pages = len(pdf.pages)
         st.info(f"El PDF tiene {num_pages} páginas.")
 
-        # Selección de página
         page_number = st.number_input("Selecciona la página (empezando en 1)", min_value=1, max_value=num_pages, value=1)
         page = pdf.pages[page_number-1]
         img = page.to_image(resolution=150).original.convert("RGB")
@@ -33,7 +31,15 @@ if uploaded_file:
         st.write(f"Tamaño de la imagen: {img_width}px x {img_height}px")
         st.write(f"Tamaño del PDF: {pdf_width} x {pdf_height}")
 
-    # Zona para gestionar grupos/zonas
+        # Botón para descargar la imagen de la página y facilitar medición en Paint/GIMP
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format="PNG")
+        st.download_button(
+            "Descargar imagen de la página para inspección",
+            data=img_bytes.getvalue(),
+            file_name=f"pagina_{page_number}.png"
+        )
+
     st.subheader("Define las zonas y los grupos")
 
     if "zonas" not in st.session_state:
@@ -41,16 +47,16 @@ if uploaded_file:
 
     grupo_opciones = ["Nuevo grupo"] + [f"Grupo {i+1}" for i in range(len(st.session_state["zonas"]))]
     grupo_seleccionado = st.selectbox("¿A qué grupo pertenece esta zona?", grupo_opciones)
-    x0 = st.number_input("x0 (izquierda)", min_value=0, max_value=img_width, value=0, key="x0")
-    y0 = st.number_input("y0 (arriba)", min_value=0, max_value=img_height, value=0, key="y0")
-    x1 = st.number_input("x1 (derecha)", min_value=0, max_value=img_width, value=img_width, key="x1")
-    y1 = st.number_input("y1 (abajo)", min_value=0, max_value=img_height, value=img_height, key="y1")
+    x0 = st.slider("x0 (izquierda)", 0, img_width, 0, 1)
+    y0 = st.slider("y0 (arriba)", 0, img_height, 0, 1)
+    x1 = st.slider("x1 (derecha)", 0, img_width, img_width, 1)
+    y1 = st.slider("y1 (abajo)", 0, img_height, img_height, 1)
 
-    # Previsualización de recorte (en imagen)
+    # Previsualización del recorte de la imagen
     crop_img = img.crop((x0, y0, x1, y1))
     st.image(crop_img, caption="Previsualización del recorte", use_container_width=True)
 
-    # Previsualización del texto PDF (recorte real)
+    # Previsualización del texto PDF real
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         page = pdf.pages[page_number-1]
         pdf_crop_coords = coords_img2pdf(x0, y0, x1, y1, img_width, img_height, pdf_width, pdf_height)
@@ -73,7 +79,6 @@ if uploaded_file:
             st.session_state["zonas"][idx].append(nueva_zona)
         st.success(f"Zona añadida a {grupo_seleccionado}.")
 
-    # Mostrar las zonas agregadas
     if st.session_state["zonas"]:
         st.markdown("#### Zonas añadidas (por grupos):")
         for i, grupo in enumerate(st.session_state["zonas"]):
@@ -85,7 +90,6 @@ if uploaded_file:
             st.session_state["zonas"] = []
             st.experimental_rerun()
 
-    # Procesar extracción de datos
     if st.session_state["zonas"] and st.button("Extraer datos de todas las zonas y descargar Excel"):
         datos_finales = []
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
