@@ -4,6 +4,7 @@ import pdfplumber
 import pandas as pd
 import io
 from PIL import Image
+import numpy as np
 import re
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
@@ -30,6 +31,9 @@ if uploaded_file:
         page_image = Image.open(buffer_img).convert("RGBA")
         page_width, page_height = page_image.size
 
+        # La "magia": convertir la imagen a numpy
+        page_image_np = np.array(page_image)
+
     # Canvas visual para dibujar zonas
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
@@ -37,7 +41,7 @@ if uploaded_file:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image,
+        background_image=page_image_np,  # <--- aquí el cambio clave
         update_streamlit=True,
         height=page_height,
         width=page_width,
