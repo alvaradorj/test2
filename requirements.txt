@@ -1,6 +1,6 @@
 streamlit
 pdfplumber
 pandas
-streamlit-drawable-canvas==0.9.3
+streamlit-drawable-canvas
 openpyxl
 Pillow
