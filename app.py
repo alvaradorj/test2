@@ -24,15 +24,14 @@ if uploaded_file:
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # --- Conversión para compatibilidad 100% ---
+        # --- Conversión para compatibilidad con st_canvas ---
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
-        page_image = Image.open(buffer_img).convert("RGBA")
+        page_image = Image.open(buffer_img).convert("RGB")  # ¡SOLO RGB!
         page_width, page_height = page_image.size
 
-        # La "magia": convertir la imagen a numpy
-        page_image_np = np.array(page_image)
+        page_image_np = np.array(page_image)  # <-- Numpy array RGB (H, W, 3)
 
     # Canvas visual para dibujar zonas
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
@@ -41,7 +40,7 @@ if uploaded_file:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image_np,  # <--- aquí el cambio clave
+        background_image=page_image_np,
         update_streamlit=True,
         height=page_height,
         width=page_width,
