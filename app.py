@@ -4,6 +4,7 @@ import pdfplumber
 import pandas as pd
 import io
 from PIL import Image
+import numpy as np
 import re
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
@@ -26,11 +27,18 @@ else:
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # Siempre RGB para máxima compatibilidad
+        # GUARDA a buffer y reabre siempre como PIL.Image RGB
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
         page_image = Image.open(buffer_img).convert("RGB")
+
+        # Truco extra: re-convierte a PNG en otro buffer y reabre una vez más (¡soluciona bugs en Streamlit Cloud!)
+        buffer_img2 = io.BytesIO()
+        page_image.save(buffer_img2, format="PNG")
+        buffer_img2.seek(0)
+        page_image = Image.open(buffer_img2).convert("RGB")
+
         page_width, page_height = page_image.size
 
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
@@ -39,7 +47,7 @@ else:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image,  # <-- PIL.Image en RGB
+        background_image=page_image,  # PIL.Image en RGB, reabierto 2 veces
         update_streamlit=True,
         height=page_height,
         width=page_width,
@@ -47,7 +55,7 @@ else:
         key="canvas"
     )
 
-    # Procesado de zonas seleccionadas
+    # El resto igual...
     if canvas_result.json_data:
         zonas = []
         for obj in canvas_result.json_data["objects"]:
