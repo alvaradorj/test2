@@ -4,6 +4,7 @@ import pdfplumber
 import pandas as pd
 import io
 from PIL import Image
+import numpy as np
 import re
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
@@ -16,22 +17,20 @@ st.markdown("""
 """)
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
-
-if not uploaded_file:
-    st.info("Sube un PDF para empezar.")
-else:
+if uploaded_file:
     pdf_bytes = uploaded_file.read()
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         first_page = pdf.pages[0]
         img_wrapper = first_page.to_image(resolution=150)
         page_image = img_wrapper.original
 
-        # Siempre RGB para máxima compatibilidad
+        # Asegura que sea RGB antes de convertir a numpy
         buffer_img = io.BytesIO()
         page_image.save(buffer_img, format="PNG")
         buffer_img.seek(0)
         page_image = Image.open(buffer_img).convert("RGB")
         page_width, page_height = page_image.size
+        page_image_np = np.array(page_image)
 
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
@@ -39,7 +38,7 @@ else:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image,  # <-- PIL.Image en RGB
+        background_image=page_image_np,
         update_streamlit=True,
         height=page_height,
         width=page_width,
@@ -56,6 +55,7 @@ else:
                 top = obj["top"]
                 width = obj["width"]
                 height = obj["height"]
+                # pdfplumber espera (x0, y0, x1, y1)
                 zonas.append((left, top, left + width, top + height))
 
         if zonas:
@@ -105,5 +105,9 @@ else:
                     st.error("No se extrajo ningún dato. Ajusta las zonas o revisa el formato del PDF.")
         else:
             st.warning("Dibuja al menos una zona antes de continuar.")
+
     else:
         st.info("Dibuja con el ratón las zonas de datos sobre la imagen del PDF.")
+
+else:
+    st.info("Sube un PDF para empezar.")
