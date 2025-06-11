@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_drawable_canvas_fix import st_canvas
+from streamlit_drawable_canvas import st_canvas
 import pdfplumber
 import pandas as pd
 import io
