@@ -16,6 +16,14 @@ st.markdown("""
 
 uploaded_file = st.file_uploader("Sube tu archivo PDF", type="pdf")
 
+def coords_img2pdf(x0, y0, x1, y1, img_width, img_height, pdf_width, pdf_height):
+    x0_pdf = x0 * pdf_width / img_width
+    x1_pdf = x1 * pdf_width / img_width
+    # Invertimos Y porque el origen en la imagen es arriba y en PDF es abajo
+    y0_pdf = pdf_height - (y0 * pdf_height / img_height)
+    y1_pdf = pdf_height - (y1 * pdf_height / img_height)
+    return (x0_pdf, min(y0_pdf, y1_pdf), x1_pdf, max(y0_pdf, y1_pdf))
+
 if not uploaded_file:
     st.info("Sube un PDF para empezar.")
 else:
@@ -25,6 +33,7 @@ else:
         img_wrapper = first_page.to_image(resolution=200)
         page_image = img_wrapper.original.convert("RGB")
         page_width, page_height = page_image.size
+        pdf_width, pdf_height = first_page.width, first_page.height
 
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
@@ -58,7 +67,9 @@ else:
                     datos = []
                     regex_tramo = re.compile(r'(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)\s+(\d{2}:\s*\d{2}:\s*\d{2}\.\d*)')
                     for zona in zonas:
-                        crop = pdf.pages[0].crop(zona)
+                        x0, y0, x1, y1 = zona
+                        bbox = coords_img2pdf(x0, y0, x1, y1, page_width, page_height, pdf_width, pdf_height)
+                        crop = pdf.pages[0].crop(bbox)
                         texto = crop.extract_text() or ""
                         segmento = ""
                         for linea in texto.split("\n"):
