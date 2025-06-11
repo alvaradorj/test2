@@ -5,13 +5,6 @@ import pandas as pd
 import io
 from PIL import Image
 import re
-import base64
-
-def pil_to_base64(img):
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    base64_img = base64.b64encode(buffer.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{base64_img}"
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
 st.title("PDF a Excel: Selecciona zonas de datos manualmente")
@@ -40,16 +33,13 @@ else:
         page_image = Image.open(buffer_img).convert("RGB")
         page_width, page_height = page_image.size
 
-        # Convertimos a base64 para fondo canvas
-        page_image_base64 = pil_to_base64(page_image)
-
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.2)",  # Naranja translúcido
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image_base64,  # <-- Base64 string, nunca numpy
+        background_image=page_image,  # <-- PIL.Image en RGB
         update_streamlit=True,
         height=page_height,
         width=page_width,
