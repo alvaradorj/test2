@@ -3,7 +3,6 @@ from streamlit_drawable_canvas import st_canvas
 import pdfplumber
 import pandas as pd
 import io
-from PIL import Image
 import re
 
 st.set_page_config(page_title="PDF a Excel - Zonas de datos", layout="wide")
@@ -23,14 +22,8 @@ else:
     pdf_bytes = uploaded_file.read()
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         first_page = pdf.pages[0]
-        img_wrapper = first_page.to_image(resolution=150)
-        page_image = img_wrapper.original
-
-        # Siempre RGB para máxima compatibilidad
-        buffer_img = io.BytesIO()
-        page_image.save(buffer_img, format="PNG")
-        buffer_img.seek(0)
-        page_image = Image.open(buffer_img).convert("RGB")
+        img_wrapper = first_page.to_image(resolution=200)
+        page_image = img_wrapper.original.convert("RGB")
         page_width, page_height = page_image.size
 
     st.markdown("Dibuja **rectángulos** sobre las áreas que contienen datos.")
@@ -39,7 +32,7 @@ else:
         stroke_width=2,
         stroke_color="#ff8800",
         background_color="#fff",
-        background_image=page_image,  # <-- PIL.Image en RGB
+        background_image=page_image,  # PIL.Image en RGB
         update_streamlit=True,
         height=page_height,
         width=page_width,
